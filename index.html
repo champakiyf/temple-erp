@@ -114,7 +114,7 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 const sb = supabase.createClient('https://fnlsqpnzejwahxoiuvzg.supabase.co','sb_publishable_8dgSEYe5OOeixu9_gwKfVQ_uYFAfK2V');
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const money = n => '৳' + Number(n).toLocaleString('bn-BD',{minimumFractionDigits:2,maximumFractionDigits:2});
+const money = n => '৳' + Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const today = () => new Date().toLocaleDateString('sv-SE');
 const METHODS = {cash:'ক্যাশ',bkash:'bKash',nagad:'Nagad',bank:'ব্যাংক',other:'অন্যান্য'};
 let cats = [], canEdit = false;
