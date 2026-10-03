@@ -12,7 +12,7 @@
 :root{--ink:#1f2a44;--gold:#e8890c;--bg:#f4f5f9;--card:#fff;--line:#dfe2ea;--inc:#14724f;--exp:#b3261e;--mut:#667}
 *{box-sizing:border-box}
 body{margin:0;font-family:"Hind Siliguri","Noto Sans Bengali",system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:16px;line-height:1.5}
-header{background:var(--ink);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+header{background:var(--ink);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 header h1{font-size:18px;margin:0;font-weight:600}
 header small{opacity:.75;display:block;font-size:12px}
 button,input,select,textarea{font:inherit}
@@ -70,14 +70,21 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 <div id="app" class="hide">
   <header>
     <div><h1>মন্দির ERP</h1><small id="who"></small></div>
-    <button class="btn ghost" id="logout">লগআউট</button>
+    <div style="display:flex;gap:6px"><button class="btn ghost" id="pwBtn">পাসওয়ার্ড বদলান</button><button class="btn ghost" id="logout">লগআউট</button></div>
   </header>
   <main>
+    <div class="panel hide" id="pwPanel">
+      <h2>পাসওয়ার্ড বদলান</h2>
+      <label for="pw1">নতুন পাসওয়ার্ড (কমপক্ষে ৮ অক্ষর)</label><input id="pw1" type="password" autocomplete="new-password">
+      <label for="pw2">আবার লিখুন</label><input id="pw2" type="password" autocomplete="new-password">
+      <p><button class="btn" id="pwSave">পাসওয়ার্ড সংরক্ষণ করুন</button> <button class="btn" style="background:#e9ebf2;color:var(--ink)" id="pwCancel">বন্ধ করুন</button></p>
+      <div id="pwMsg"></div>
+    </div>
     <div class="tabs">
       <button class="tab on" data-tab="accounts">হিসাব (Accounts)</button>
       <button class="tab" data-tab="store">Store</button>
       <button class="tab" data-tab="books">Books</button>
-      <button class="tab" disabled>Kitchen (শীঘ্রই)</button>
+      <button class="tab" data-tab="kitchen">Kitchen</button>
     </div>
     <div id="noAccess" class="panel hide">এই বিভাগ দেখার অনুমতি আপনার নেই। Admin-এর সাথে যোগাযোগ করুন।</div>
     <div id="acc" class="hide">
@@ -169,6 +176,25 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
       </div>
       <div class="panel"><h2>সাম্প্রতিক লেনদেন</h2><div id="bList"></div></div>
     </div>
+    <div id="kitchen" class="hide">
+      <div class="panel"><h2>সাম্প্রতিক মেনু ও প্রসাদ</h2><div id="kSum"></div><div id="kList"></div></div>
+      <div class="panel" id="kForm">
+        <h2>মেনু / প্রসাদ এন্ট্রি</h2>
+        <div class="row">
+          <div><label for="kDate">তারিখ</label><input id="kDate" type="date"></div>
+          <div><label for="kMeal">বেলা</label>
+            <select id="kMeal"><option value="breakfast">সকালের নাস্তা</option><option value="lunch">দুপুরের প্রসাদ</option><option value="dinner">রাতের প্রসাদ</option><option value="special">বিশেষ ভোগ / উৎসব</option></select></div>
+        </div>
+        <label for="kMenu">মেনু</label><textarea id="kMenu" rows="2"></textarea>
+        <div class="row">
+          <div><label for="kPlan">পরিকল্পিত সংখ্যা (জন)</label><input id="kPlan" type="number" min="0" step="1" inputmode="numeric"></div>
+          <div><label for="kServed">পরিবেশিত সংখ্যা (জন)</label><input id="kServed" type="number" min="0" step="1" inputmode="numeric"></div>
+        </div>
+        <label for="kNote">মন্তব্য (ঐচ্ছিক)</label><input id="kNote">
+        <p><button class="btn" id="kSave">সংরক্ষণ করুন</button></p><div id="kMsg"></div>
+        <small style="color:var(--mut)">একই তারিখ ও বেলায় আবার সংরক্ষণ করলে আগের এন্ট্রি হালনাগাদ হবে।</small>
+      </div>
+    </div>
   </main>
 </div>
 
@@ -210,11 +236,11 @@ async function start(){
     b.classList.toggle('hide', !canView(b.dataset.tab));
     b.onclick = () => openTab(b.dataset.tab);
   });
-  const first = ['accounts','store','books'].find(canView);
+  const first = ['accounts','store','books','kitchen'].find(canView);
   if (!first) return $('noAccess').classList.remove('hide');
   canEdit = canEditD('accounts');
   $('addPanel').classList.toggle('hide', !canEdit);
-  $('date').value = today(); $('sDate').value = today(); $('bDate').value = today();
+  $('date').value = today(); $('sDate').value = today(); $('bDate').value = today(); $('kDate').value = today();
   const [f, c] = await Promise.all([
     sb.from('funds').select('id,name').eq('active', true).order('id'),
     sb.from('txn_categories').select('id,name,kind').order('id')
@@ -224,6 +250,7 @@ async function start(){
   if (canView('accounts')) { fillCats(); refresh(); }
   if (canView('store')) loadStore();
   if (canView('books')) loadBooks();
+  if (canView('kitchen')) loadKitchen();
   openTab(first);
 }
 
@@ -232,6 +259,7 @@ function openTab(t){
   $('acc').classList.toggle('hide', t !== 'accounts');
   $('store').classList.toggle('hide', t !== 'store');
   $('books').classList.toggle('hide', t !== 'books');
+  $('kitchen').classList.toggle('hide', t !== 'kitchen');
 }
 
 function kind(){ return document.querySelector('input[name=kind]:checked').value; }
@@ -453,6 +481,62 @@ $('bSave').onclick = async () => {
   show($('bMsg'), sold ? 'সংরক্ষিত হয়েছে। Accounts-এও আয় হিসেবে যোগ হয়েছে।' : 'সংরক্ষিত হয়েছে।', true);
   loadBooks();
   if (sold && canView('accounts')) refresh();
+};
+
+const MEAL_BN = {breakfast:'সকালের নাস্তা', lunch:'দুপুরের প্রসাদ', dinner:'রাতের প্রসাদ', special:'বিশেষ ভোগ / উৎসব'};
+let kRows = [];
+
+async function loadKitchen(){
+  const ed = canEditD('kitchen');
+  $('kForm').classList.toggle('hide', !ed);
+  const {data} = await sb.from('kitchen_menu').select('*').order('menu_date', {ascending:false}).limit(130);
+  kRows = data || [];
+  const ym = today().slice(0, 7);
+  const served = kRows.filter(x => x.menu_date.startsWith(ym)).reduce((s, x) => s + (x.served_count || 0), 0);
+  $('kSum').innerHTML = `<div class="fund" style="margin-bottom:12px"><span>এই মাসে মোট পরিবেশিত (জন)</span><b>${num(served)}</b></div>`;
+  $('kList').innerHTML = kRows.length ? kRows.slice(0, 30).map((x, i) => `
+    <div class="txn"><div>${esc(x.menu_date)} — ${esc(MEAL_BN[x.meal])}
+      <small>${esc(x.menu)}</small>${x.note ? '<small>' + esc(x.note) + '</small>' : ''}
+      ${ed ? `<button class="link" style="color:var(--ink)" data-i="${i}">সম্পাদনা</button>` : ''}</div>
+      <div class="amt">${x.served_count != null ? num(x.served_count) + ' জন' : '—'}<small>পরিকল্পিত ${x.planned_count != null ? num(x.planned_count) : '—'}</small></div></div>`).join('')
+    : 'এখনও কোনো এন্ট্রি নেই। নিচের ফর্ম থেকে আজকের মেনু দিন।';
+  document.querySelectorAll('#kList .link').forEach(b => b.onclick = () => {
+    const x = kRows[+b.dataset.i];
+    $('kDate').value = x.menu_date; $('kMeal').value = x.meal; $('kMenu').value = x.menu;
+    $('kPlan').value = x.planned_count ?? ''; $('kServed').value = x.served_count ?? ''; $('kNote').value = x.note || '';
+    $('kForm').scrollIntoView({behavior:'smooth'});
+  });
+}
+
+$('kSave').onclick = async () => {
+  const menu = $('kMenu').value.trim();
+  if (!menu) return show($('kMsg'), 'মেনু লিখুন।');
+  const toN = v => v === '' ? null : parseInt(v);
+  $('kSave').disabled = true; $('kMsg').innerHTML = '';
+  const {error} = await sb.from('kitchen_menu').upsert({
+    menu_date: $('kDate').value || today(), meal: $('kMeal').value, menu,
+    planned_count: toN($('kPlan').value), served_count: toN($('kServed').value),
+    note: $('kNote').value.trim() || null
+  }, {onConflict: 'menu_date,meal'});
+  $('kSave').disabled = false;
+  if (error) return show($('kMsg'), 'সংরক্ষণ হয়নি: ' + error.message);
+  $('kMenu').value = ''; $('kPlan').value = ''; $('kServed').value = ''; $('kNote').value = '';
+  show($('kMsg'), 'সংরক্ষিত হয়েছে।', true);
+  loadKitchen();
+};
+
+$('pwBtn').onclick = () => { $('pwPanel').classList.toggle('hide'); $('pwMsg').innerHTML = ''; };
+$('pwCancel').onclick = () => $('pwPanel').classList.add('hide');
+$('pwSave').onclick = async () => {
+  const a = $('pw1').value, b = $('pw2').value;
+  if (a.length < 8) return show($('pwMsg'), 'পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের হতে হবে।');
+  if (a !== b) return show($('pwMsg'), 'দুটি পাসওয়ার্ড মেলেনি।');
+  $('pwSave').disabled = true;
+  const {error} = await sb.auth.updateUser({password: a});
+  $('pwSave').disabled = false;
+  if (error) return show($('pwMsg'), /different/i.test(error.message) ? 'নতুন পাসওয়ার্ড আগেরটির থেকে আলাদা হতে হবে।' : 'বদলানো হয়নি: ' + error.message);
+  $('pw1').value = ''; $('pw2').value = '';
+  show($('pwMsg'), 'পাসওয়ার্ড বদলানো হয়েছে।', true);
 };
 
 sb.auth.getSession().then(({data}) => { if (data.session) start(); });
