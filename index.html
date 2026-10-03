@@ -76,7 +76,7 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
     <div class="tabs">
       <button class="tab on" data-tab="accounts">হিসাব (Accounts)</button>
       <button class="tab" data-tab="store">Store</button>
-      <button class="tab" disabled>Books (শীঘ্রই)</button>
+      <button class="tab" data-tab="books">Books</button>
       <button class="tab" disabled>Kitchen (শীঘ্রই)</button>
     </div>
     <div id="noAccess" class="panel hide">এই বিভাগ দেখার অনুমতি আপনার নেই। Admin-এর সাথে যোগাযোগ করুন।</div>
@@ -139,6 +139,36 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
       </div>
       <div class="panel"><h2>সাম্প্রতিক লেনদেন</h2><div id="mList"></div></div>
     </div>
+    <div id="books" class="hide">
+      <div class="panel"><h2>বইয়ের মজুদ</h2><div id="bStock"></div></div>
+      <div class="panel" id="bMoveForm">
+        <h2>বই গ্রহণ / বিতরণ / ফেরত</h2>
+        <div class="kind">
+          <label class="inc"><input type="radio" name="bk" value="receive" checked><span>গ্রহণ</span></label>
+          <label class="exp"><input type="radio" name="bk" value="distribute"><span>বিতরণ</span></label>
+          <label class="inc"><input type="radio" name="bk" value="return"><span>ফেরত</span></label>
+        </div>
+        <label for="bItem">বই</label><select id="bItem"></select>
+        <div class="row">
+          <div><label for="bQty">কপির সংখ্যা</label><input id="bQty" type="number" min="1" step="1" inputmode="numeric"></div>
+          <div><label for="bDate">তারিখ</label><input id="bDate" type="date"></div>
+        </div>
+        <div id="bAmtBox" class="hide"><label for="bAmt">আদায়কৃত টাকা (দাম × কপি, দরকারে বদলান)। Accounts-এ Book Sales ফান্ডে আয় হিসেবে নিজে থেকে যোগ হবে।</label><input id="bAmt" type="number" min="0" step="0.01" inputmode="decimal"></div>
+        <div id="bWhoBox" class="hide"><label for="bWho">বিতরণকারীর নাম (ঐচ্ছিক)</label><input id="bWho"></div>
+        <label for="bNote">মন্তব্য (ঐচ্ছিক)</label><input id="bNote">
+        <p><button class="btn" id="bSave">সংরক্ষণ করুন</button></p><div id="bMsg"></div>
+      </div>
+      <div class="panel" id="bBookForm">
+        <h2>নতুন বই যোগ করুন</h2>
+        <label for="bTitle">বইয়ের নাম</label><input id="bTitle">
+        <div class="row">
+          <div><label for="bLang">ভাষা</label><input id="bLang" value="Bangla"></div>
+          <div><label for="bPrice">দাম (টাকা)</label><input id="bPrice" type="number" min="0" step="0.01" inputmode="decimal"></div>
+        </div>
+        <p><button class="btn" id="bAdd">বই যোগ করুন</button></p><div id="bAddMsg"></div>
+      </div>
+      <div class="panel"><h2>সাম্প্রতিক লেনদেন</h2><div id="bList"></div></div>
+    </div>
   </main>
 </div>
 
@@ -180,11 +210,11 @@ async function start(){
     b.classList.toggle('hide', !canView(b.dataset.tab));
     b.onclick = () => openTab(b.dataset.tab);
   });
-  const first = ['accounts','store'].find(canView);
+  const first = ['accounts','store','books'].find(canView);
   if (!first) return $('noAccess').classList.remove('hide');
   canEdit = canEditD('accounts');
   $('addPanel').classList.toggle('hide', !canEdit);
-  $('date').value = today(); $('sDate').value = today();
+  $('date').value = today(); $('sDate').value = today(); $('bDate').value = today();
   const [f, c] = await Promise.all([
     sb.from('funds').select('id,name').eq('active', true).order('id'),
     sb.from('txn_categories').select('id,name,kind').order('id')
@@ -193,6 +223,7 @@ async function start(){
   $('fund').innerHTML = (f.data||[]).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
   if (canView('accounts')) { fillCats(); refresh(); }
   if (canView('store')) loadStore();
+  if (canView('books')) loadBooks();
   openTab(first);
 }
 
@@ -200,6 +231,7 @@ function openTab(t){
   document.querySelectorAll('.tab[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   $('acc').classList.toggle('hide', t !== 'accounts');
   $('store').classList.toggle('hide', t !== 'store');
+  $('books').classList.toggle('hide', t !== 'books');
 }
 
 function kind(){ return document.querySelector('input[name=kind]:checked').value; }
@@ -225,7 +257,7 @@ async function refresh(){
       <div>${esc(x.txn_categories ? x.txn_categories.name : '')} — ${esc(x.funds ? x.funds.name : '')}
         <small>${esc(x.txn_date)} · ${esc(METHODS[x.payment_method])} · ${esc(x.voucher_no)}${x.donors ? ' · ' + esc(x.donors.name) : ''}</small>
         ${x.note ? '<small>' + esc(x.note) + '</small>' : ''}
-        ${x.voided ? '<small>বাতিল: ' + esc(x.void_reason) + '</small>' : (canEdit ? `<button class="link" data-id="${x.id}">বাতিল করুন</button>` : '')}
+        ${x.voided ? '<small>বাতিল: ' + esc(x.void_reason) + '</small>' : (x.book_movement_id ? '<small>বই বিতরণ থেকে এসেছে। বাতিল করতে Books ট্যাব ব্যবহার করুন।</small>' : (canEdit ? `<button class="link" data-id="${x.id}">বাতিল করুন</button>` : ''))}
       </div>
       <div class="amt ${x.kind}">${x.kind === 'income' ? '+' : '−'}${money(x.amount)}</div>
     </div>`).join('') : 'এখনও কোনো এন্ট্রি নেই। উপরের ফর্ম থেকে প্রথম এন্ট্রি দিন।';
@@ -338,6 +370,89 @@ $('sSave').onclick = async () => {
   $('sQty').value = ''; $('sPrice').value = ''; $('sSup').value = ''; $('sNote').value = '';
   show($('sMsg'), 'সংরক্ষিত হয়েছে।', true);
   loadStore();
+};
+
+let books = [], amtTouched = false;
+const bk = () => document.querySelector('input[name=bk]:checked').value;
+const KIND_BN = {receive:'গ্রহণ', distribute:'বিতরণ', return:'ফেরত'};
+function bkUi(){ $('bAmtBox').classList.toggle('hide', bk() !== 'distribute'); $('bWhoBox').classList.toggle('hide', bk() === 'receive'); }
+function bkSuggest(){
+  if (bk() !== 'distribute' || amtTouched) return;
+  const b = books.find(x => String(x.id) === $('bItem').value), q = parseInt($('bQty').value) || 0;
+  $('bAmt').value = (b && q) ? Number(b.price) * q : '';
+}
+document.querySelectorAll('input[name=bk]').forEach(r => r.onchange = () => { bkUi(); bkSuggest(); });
+$('bItem').onchange = () => { amtTouched = false; bkSuggest(); };
+$('bQty').oninput = bkSuggest;
+$('bAmt').oninput = () => { amtTouched = true; };
+
+async function loadBooks(){
+  const ed = canEditD('books');
+  $('bMoveForm').classList.toggle('hide', !ed); $('bBookForm').classList.toggle('hide', !ed);
+  const [s, m] = await Promise.all([
+    sb.from('book_stock').select('*').order('title'),
+    sb.from('book_movements').select('*, books(title,language)').order('created_at', {ascending:false}).limit(30)
+  ]);
+  books = s.data || [];
+  $('bItem').innerHTML = books.map(x => `<option value="${x.id}">${esc(x.title)} (${esc(x.language)})</option>`).join('');
+  $('bStock').innerHTML = books.length ? books.map(x => `
+    <div class="txn"><div>${esc(x.title)}
+      <small>${esc(x.language)} · দাম ${money(x.price)} · মোট বিতরণ ${num(x.total_distributed)} কপি · আদায় ${money(x.total_collected)}</small></div>
+      <div class="amt">${num(x.stock)} কপি</div></div>`).join('')
+    : 'এখনও কোনো বই নেই। নিচের ফর্ম থেকে প্রথম বই যোগ করুন।';
+  const rows = m.data || [];
+  $('bList').innerHTML = rows.length ? rows.map(x => `
+    <div class="txn ${x.voided ? 'void' : ''}"><div>${esc(x.books ? x.books.title : '')}
+      <small>${esc(x.move_date)} · ${KIND_BN[x.kind]}${x.distributor_name ? ' · ' + esc(x.distributor_name) : ''}${x.kind === 'distribute' ? ' · আদায় ' + money(x.amount_collected) : ''}</small>
+      ${x.note ? '<small>' + esc(x.note) + '</small>' : ''}
+      ${x.voided ? '<small>বাতিল: ' + esc(x.void_reason) + '</small>' : (canEditD('books') ? `<button class="link" data-id="${x.id}">বাতিল করুন</button>` : '')}</div>
+      <div class="amt ${x.kind === 'distribute' ? 'expense' : 'income'}">${x.kind === 'distribute' ? '−' : '+'}${num(x.qty)} কপি</div></div>`).join('')
+    : 'এখনও কোনো লেনদেন নেই।';
+  document.querySelectorAll('#bList .link').forEach(b => b.onclick = () => voidBook(b.dataset.id));
+  bkUi();
+}
+
+async function voidBook(id){
+  const reason = prompt('বাতিলের কারণ লিখুন:');
+  if (!reason || !reason.trim()) return;
+  const {error} = await sb.from('book_movements').update({voided:true, void_reason:reason.trim()}).eq('id', id);
+  if (error) return alert('বাতিল হয়নি: ' + error.message);
+  loadBooks();
+  if (canView('accounts')) refresh();
+}
+
+$('bAdd').onclick = async () => {
+  const title = $('bTitle').value.trim(), language = $('bLang').value.trim() || 'Bangla';
+  if (!title) return show($('bAddMsg'), 'বইয়ের নাম লিখুন।');
+  $('bAdd').disabled = true;
+  const {error} = await sb.from('books').insert({title, language, price: parseFloat($('bPrice').value) || 0});
+  $('bAdd').disabled = false;
+  if (error) return show($('bAddMsg'), error.code === '23505' ? 'এই নাম ও ভাষায় বই আগেই আছে।' : 'যোগ হয়নি: ' + error.message);
+  $('bTitle').value = ''; $('bPrice').value = '';
+  show($('bAddMsg'), 'বই যোগ হয়েছে।', true);
+  loadBooks();
+};
+
+$('bSave').onclick = async () => {
+  const qty = parseInt($('bQty').value), k = bk();
+  if (!$('bItem').value) return show($('bMsg'), 'আগে একটি বই যোগ করুন।');
+  if (!(qty > 0)) return show($('bMsg'), 'কপির সংখ্যা লিখুন।');
+  const b = books.find(x => String(x.id) === $('bItem').value);
+  if (k === 'distribute' && b && qty > Number(b.stock) && !confirm('মজুদ আছে ' + num(b.stock) + ' কপি, তার চেয়ে বেশি বিতরণ হচ্ছে। তবুও সংরক্ষণ করবেন?')) return;
+  const sold = k === 'distribute' && (parseFloat($('bAmt').value) || 0) > 0;
+  $('bSave').disabled = true; $('bMsg').innerHTML = '';
+  const {error} = await sb.from('book_movements').insert({
+    book_id: +$('bItem').value, kind: k, qty, move_date: $('bDate').value || today(),
+    amount_collected: k === 'distribute' ? (parseFloat($('bAmt').value) || 0) : 0,
+    distributor_name: k === 'receive' ? null : ($('bWho').value.trim() || null),
+    note: $('bNote').value.trim() || null
+  });
+  $('bSave').disabled = false;
+  if (error) return show($('bMsg'), 'সংরক্ষণ হয়নি: ' + error.message);
+  $('bQty').value = ''; $('bAmt').value = ''; $('bWho').value = ''; $('bNote').value = ''; amtTouched = false;
+  show($('bMsg'), sold ? 'সংরক্ষিত হয়েছে। Accounts-এও আয় হিসেবে যোগ হয়েছে।' : 'সংরক্ষিত হয়েছে।', true);
+  loadBooks();
+  if (sold && canView('accounts')) refresh();
 };
 
 sb.auth.getSession().then(({data}) => { if (data.session) start(); });
