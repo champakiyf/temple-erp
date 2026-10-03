@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>মন্দির ERP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<meta name="theme-color" content="#1f2a44">
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#1f2a44;--gold:#e8890c;--bg:#f4f5f9;--card:#fff;--line:#dfe2ea;--inc:#14724f;--exp:#b3261e;--mut:#667}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Hind Siliguri","Noto Sans Bengali",system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:16px;line-height:1.5}
+header{background:var(--ink);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+header h1{font-size:18px;margin:0;font-weight:600}
+header small{opacity:.75;display:block;font-size:12px}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+.btn{background:var(--gold);color:#1a1200;border:0;border-radius:8px;padding:10px 16px;font-weight:600}
+.btn.ghost{background:transparent;color:#fff;border:1px solid #ffffff55;padding:6px 12px;font-weight:500}
+.btn:disabled{opacity:.5}
+main{max-width:760px;margin:0 auto;padding:16px}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:16px}
+.tab{border:1px solid var(--line);background:var(--card);border-radius:20px;padding:6px 14px;white-space:nowrap;color:var(--ink)}
+.tab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.tab[disabled]{color:#99a;cursor:default}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+h2{font-size:17px;margin:0 0 12px}
+.funds{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.fund{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:8px;padding:10px 12px}
+.fund b{display:block;font-size:19px}
+.fund span{font-size:13px;color:var(--mut)}
+label{display:block;font-size:14px;color:var(--mut);margin:10px 0 3px}
+input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kind{display:flex;gap:8px}
+.kind label{flex:1;margin:0;border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center;cursor:pointer;color:var(--ink)}
+.kind input{display:none}
+.kind input:checked+span{font-weight:700}
+.kind label.inc:has(input:checked){background:#e3f4ec;border-color:var(--inc)}
+.kind label.exp:has(input:checked){background:#fbe9e7;border-color:var(--exp)}
+.txn{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.txn:first-of-type{border-top:0}
+.txn small{color:var(--mut);display:block}
+.amt{font-weight:700;white-space:nowrap;text-align:right}
+.amt.income{color:var(--inc)}.amt.expense{color:var(--exp)}
+.void{text-decoration:line-through;opacity:.5}
+.link{background:none;border:0;color:var(--exp);padding:0;font-size:13px;text-decoration:underline}
+.msg{padding:10px 12px;border-radius:8px;margin-top:10px;font-size:14px}
+.msg.err{background:#fbe9e7;color:var(--exp)}.msg.ok{background:#e3f4ec;color:var(--inc)}
+#login{max-width:380px;margin:12vh auto;padding:0 16px}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+
+<section id="login">
+  <div class="panel">
+    <h2>মন্দির ERP — লগইন</h2>
+    <label for="em">ইমেইল</label><input id="em" type="email" autocomplete="username">
+    <label for="pw">পাসওয়ার্ড</label><input id="pw" type="password" autocomplete="current-password">
+    <p><button class="btn" id="loginBtn" style="width:100%">লগইন করুন</button></p>
+    <div id="loginMsg"></div>
+  </div>
+</section>
+
+<div id="app" class="hide">
+  <header>
+    <div><h1>মন্দির ERP</h1><small id="who"></small></div>
+    <button class="btn ghost" id="logout">লগআউট</button>
+  </header>
+  <main>
+    <div class="tabs">
+      <button class="tab on">হিসাব (Accounts)</button>
+      <button class="tab" disabled>Store (শীঘ্রই)</button>
+      <button class="tab" disabled>Books (শীঘ্রই)</button>
+      <button class="tab" disabled>Kitchen (শীঘ্রই)</button>
+    </div>
+    <div id="noAccess" class="panel hide">এই বিভাগ দেখার অনুমতি আপনার নেই। Admin-এর সাথে যোগাযোগ করুন।</div>
+    <div id="acc" class="hide">
+      <div class="funds" id="funds"></div>
+      <div class="panel" id="addPanel">
+        <h2>নতুন এন্ট্রি</h2>
+        <div class="kind">
+          <label class="inc"><input type="radio" name="kind" value="income" checked><span>আয় / দান</span></label>
+          <label class="exp"><input type="radio" name="kind" value="expense"><span>ব্যয়</span></label>
+        </div>
+        <div class="row">
+          <div><label for="amount">টাকার পরিমাণ</label><input id="amount" type="number" min="1" step="0.01" inputmode="decimal"></div>
+          <div><label for="date">তারিখ</label><input id="date" type="date"></div>
+        </div>
+        <div class="row">
+          <div><label for="fund">ফান্ড</label><select id="fund"></select></div>
+          <div><label for="cat">ধরন</label><select id="cat"></select></div>
+        </div>
+        <div class="row">
+          <div><label for="method">পদ্ধতি</label>
+            <select id="method"><option value="cash">ক্যাশ</option><option value="bkash">bKash</option><option value="nagad">Nagad</option><option value="bank">ব্যাংক</option><option value="other">অন্যান্য</option></select></div>
+          <div id="donorBox"><label for="donor">দাতার নাম (ঐচ্ছিক)</label><input id="donor"></div>
+        </div>
+        <label for="note">মন্তব্য (ঐচ্ছিক)</label><textarea id="note" rows="2"></textarea>
+        <p><button class="btn" id="save">এন্ট্রি সংরক্ষণ করুন</button></p>
+        <div id="saveMsg"></div>
+      </div>
+      <div class="panel"><h2>সাম্প্রতিক এন্ট্রি</h2><div id="list"></div></div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const sb = supabase.createClient('https://fnlsqpnzejwahxoiuvzg.supabase.co','sb_publishable_8dgSEYe5OOeixu9_gwKfVQ_uYFAfK2V');
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money = n => '৳' + Number(n).toLocaleString('bn-BD',{minimumFractionDigits:2,maximumFractionDigits:2});
+const today = () => new Date().toLocaleDateString('sv-SE');
+const METHODS = {cash:'ক্যাশ',bkash:'bKash',nagad:'Nagad',bank:'ব্যাংক',other:'অন্যান্য'};
+let cats = [], canEdit = false;
+
+function show(el, msg, ok){ el.innerHTML = '<div class="msg '+(ok?'ok':'err')+'">'+esc(msg)+'</div>'; }
+
+$('loginBtn').onclick = async () => {
+  $('loginBtn').disabled = true; $('loginMsg').innerHTML = '';
+  const {error} = await sb.auth.signInWithPassword({email:$('em').value.trim(), password:$('pw').value});
+  $('loginBtn').disabled = false;
+  if (error) return show($('loginMsg'), 'লগইন হয়নি: ইমেইল বা পাসওয়ার্ড ঠিক নেই।');
+  start();
+};
+$('pw').addEventListener('keydown', e => { if (e.key === 'Enter') $('loginBtn').click(); });
+$('logout').onclick = async () => { await sb.auth.signOut(); location.reload(); };
+
+async function start(){
+  const {data:{user}} = await sb.auth.getUser();
+  if (!user) return;
+  $('login').classList.add('hide'); $('app').classList.remove('hide');
+  const {data:p} = await sb.from('profiles').select('full_name,is_admin').eq('id', user.id).single();
+  const {data:ud} = await sb.from('user_departments').select('access,departments(code)').eq('user_id', user.id);
+  const mine = (ud||[]).find(x => x.departments && x.departments.code === 'accounts');
+  const isAdmin = !!(p && p.is_admin);
+  $('who').textContent = (p ? p.full_name : user.email) + (isAdmin ? ' (Admin)' : '');
+  if (!isAdmin && !mine) return $('noAccess').classList.remove('hide');
+  canEdit = isAdmin || (mine && mine.access !== 'view');
+  $('acc').classList.remove('hide');
+  $('addPanel').classList.toggle('hide', !canEdit);
+  $('date').value = today();
+  const [f, c] = await Promise.all([
+    sb.from('funds').select('id,name').eq('active', true).order('id'),
+    sb.from('txn_categories').select('id,name,kind').order('id')
+  ]);
+  cats = c.data || [];
+  $('fund').innerHTML = (f.data||[]).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  fillCats(); refresh();
+}
+
+function kind(){ return document.querySelector('input[name=kind]:checked').value; }
+function fillCats(){
+  $('cat').innerHTML = cats.filter(c => c.kind === kind()).map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  $('donorBox').classList.toggle('hide', kind() !== 'income');
+}
+document.querySelectorAll('input[name=kind]').forEach(r => r.onchange = fillCats);
+
+async function refresh(){
+  const [b, t] = await Promise.all([
+    sb.from('fund_balance').select('*').order('id'),
+    sb.from('transactions').select('*, funds(name), txn_categories(name), donors(name)')
+      .order('created_at', {ascending:false}).limit(50)
+  ]);
+  const bal = b.data || [];
+  const total = bal.reduce((s,x) => s + Number(x.balance), 0);
+  $('funds').innerHTML = `<div class="fund" style="border-left-color:var(--ink)"><span>মোট জমা</span><b>${money(total)}</b></div>` +
+    bal.map(x => `<div class="fund"><span>${esc(x.name)}</span><b>${money(x.balance)}</b></div>`).join('');
+  const rows = t.data || [];
+  $('list').innerHTML = rows.length ? rows.map(x => `
+    <div class="txn ${x.voided ? 'void' : ''}">
+      <div>${esc(x.txn_categories ? x.txn_categories.name : '')} — ${esc(x.funds ? x.funds.name : '')}
+        <small>${esc(x.txn_date)} · ${esc(METHODS[x.payment_method])} · ${esc(x.voucher_no)}${x.donors ? ' · ' + esc(x.donors.name) : ''}</small>
+        ${x.note ? '<small>' + esc(x.note) + '</small>' : ''}
+        ${x.voided ? '<small>বাতিল: ' + esc(x.void_reason) + '</small>' : (canEdit ? `<button class="link" data-id="${x.id}">বাতিল করুন</button>` : '')}
+      </div>
+      <div class="amt ${x.kind}">${x.kind === 'income' ? '+' : '−'}${money(x.amount)}</div>
+    </div>`).join('') : 'এখনও কোনো এন্ট্রি নেই। উপরের ফর্ম থেকে প্রথম এন্ট্রি দিন।';
+  document.querySelectorAll('#list .link').forEach(b => b.onclick = () => voidTxn(b.dataset.id));
+}
+
+$('save').onclick = async () => {
+  const amount = parseFloat($('amount').value);
+  if (!(amount > 0)) return show($('saveMsg'), 'টাকার পরিমাণ লিখুন।');
+  $('save').disabled = true; $('saveMsg').innerHTML = '';
+  let donor_id = null;
+  const dn = $('donor').value.trim();
+  if (kind() === 'income' && dn) {
+    const {data, error} = await sb.from('donors').insert({name: dn}).select('id').single();
+    if (error) { $('save').disabled = false; return show($('saveMsg'), 'দাতা সংরক্ষণ হয়নি: ' + error.message); }
+    donor_id = data.id;
+  }
+  const {error} = await sb.from('transactions').insert({
+    kind: kind(), amount, txn_date: $('date').value || today(),
+    fund_id: +$('fund').value, category_id: +$('cat').value,
+    payment_method: $('method').value, note: $('note').value.trim() || null, donor_id
+  });
+  $('save').disabled = false;
+  if (error) return show($('saveMsg'), 'সংরক্ষণ হয়নি: ' + error.message);
+  $('amount').value = ''; $('note').value = ''; $('donor').value = '';
+  show($('saveMsg'), 'এন্ট্রি সংরক্ষিত হয়েছে।', true);
+  refresh();
+};
+
+async function voidTxn(id){
+  const reason = prompt('বাতিলের কারণ লিখুন:');
+  if (!reason || !reason.trim()) return;
+  const {error} = await sb.from('transactions').update({voided:true, void_reason:reason.trim()}).eq('id', id);
+  if (error) return alert('বাতিল হয়নি: ' + error.message);
+  refresh();
+}
+
+sb.auth.getSession().then(({data}) => { if (data.session) start(); });
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>

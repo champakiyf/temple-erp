@@ -1,0 +1,10 @@
+{
+  "name": "মন্দির ERP",
+  "short_name": "মন্দির ERP",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1f2a44",
+  "theme_color": "#1f2a44",
+  "icons": [{"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}
