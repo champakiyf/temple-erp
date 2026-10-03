@@ -51,6 +51,7 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 .msg{padding:10px 12px;border-radius:8px;margin-top:10px;font-size:14px}
 .msg.err{background:#fbe9e7;color:var(--exp)}.msg.ok{background:#e3f4ec;color:var(--inc)}
 #login{max-width:380px;margin:12vh auto;padding:0 16px}
+.low{background:#fff1d6;color:#8a4b00;border-radius:10px;padding:0 8px;font-size:12px;font-weight:600}
 .hide{display:none!important}
 </style>
 </head>
@@ -73,8 +74,8 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
   </header>
   <main>
     <div class="tabs">
-      <button class="tab on">হিসাব (Accounts)</button>
-      <button class="tab" disabled>Store (শীঘ্রই)</button>
+      <button class="tab on" data-tab="accounts">হিসাব (Accounts)</button>
+      <button class="tab" data-tab="store">Store</button>
       <button class="tab" disabled>Books (শীঘ্রই)</button>
       <button class="tab" disabled>Kitchen (শীঘ্রই)</button>
     </div>
@@ -106,6 +107,38 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
       </div>
       <div class="panel"><h2>সাম্প্রতিক এন্ট্রি</h2><div id="list"></div></div>
     </div>
+    <div id="store" class="hide">
+      <div class="panel"><h2>বর্তমান মজুদ</h2><div id="stock"></div></div>
+      <div class="panel" id="moveForm">
+        <h2>মজুদ আসা / যাওয়া</h2>
+        <div class="kind">
+          <label class="inc"><input type="radio" name="dir" value="in" checked><span>আসা (ক্রয়)</span></label>
+          <label class="exp"><input type="radio" name="dir" value="out"><span>যাওয়া (ইস্যু)</span></label>
+        </div>
+        <label for="sItem">পণ্য</label><select id="sItem"></select>
+        <div class="row">
+          <div><label for="sQty">পরিমাণ</label><input id="sQty" type="number" min="0" step="0.001" inputmode="decimal"></div>
+          <div><label for="sDate">তারিখ</label><input id="sDate" type="date"></div>
+        </div>
+        <div id="inBox" class="row">
+          <div><label for="sPrice">একক দাম (ঐচ্ছিক)</label><input id="sPrice" type="number" min="0" step="0.01" inputmode="decimal"></div>
+          <div><label for="sSup">সরবরাহকারী (ঐচ্ছিক)</label><input id="sSup"></div>
+        </div>
+        <div id="outBox" class="hide"><label for="sDept">কোন বিভাগকে দেওয়া হলো</label><select id="sDept"></select></div>
+        <label for="sNote">মন্তব্য (ঐচ্ছিক)</label><input id="sNote">
+        <p><button class="btn" id="sSave">সংরক্ষণ করুন</button></p><div id="sMsg"></div>
+      </div>
+      <div class="panel" id="itemForm">
+        <h2>নতুন পণ্য যোগ করুন</h2>
+        <div class="row">
+          <div><label for="iName">পণ্যের নাম</label><input id="iName"></div>
+          <div><label for="iUnit">একক (kg, লিটার, পিস)</label><input id="iUnit"></div>
+        </div>
+        <label for="iMin">সতর্কতার সীমা (এর নিচে নামলে "কম" দেখাবে)</label><input id="iMin" type="number" min="0" step="0.001" value="0" inputmode="decimal">
+        <p><button class="btn" id="iSave">পণ্য যোগ করুন</button></p><div id="iMsg"></div>
+      </div>
+      <div class="panel"><h2>সাম্প্রতিক লেনদেন</h2><div id="mList"></div></div>
+    </div>
   </main>
 </div>
 
@@ -117,7 +150,9 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const money = n => '৳' + Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const today = () => new Date().toLocaleDateString('sv-SE');
 const METHODS = {cash:'ক্যাশ',bkash:'bKash',nagad:'Nagad',bank:'ব্যাংক',other:'অন্যান্য'};
-let cats = [], canEdit = false;
+let cats = [], canEdit = false, isAdmin = false, access = {}, items = [];
+const canView = c => isAdmin || c in access;
+const canEditD = c => isAdmin || (!!access[c] && access[c] !== 'view');
 
 function show(el, msg, ok){ el.innerHTML = '<div class="msg '+(ok?'ok':'err')+'">'+esc(msg)+'</div>'; }
 
@@ -137,21 +172,34 @@ async function start(){
   $('login').classList.add('hide'); $('app').classList.remove('hide');
   const {data:p} = await sb.from('profiles').select('full_name,is_admin').eq('id', user.id).single();
   const {data:ud} = await sb.from('user_departments').select('access,departments(code)').eq('user_id', user.id);
-  const mine = (ud||[]).find(x => x.departments && x.departments.code === 'accounts');
-  const isAdmin = !!(p && p.is_admin);
+  isAdmin = !!(p && p.is_admin);
+  access = {};
+  (ud||[]).forEach(x => { if (x.departments) access[x.departments.code] = x.access; });
   $('who').textContent = (p ? p.full_name : user.email) + (isAdmin ? ' (Admin)' : '');
-  if (!isAdmin && !mine) return $('noAccess').classList.remove('hide');
-  canEdit = isAdmin || (mine && mine.access !== 'view');
-  $('acc').classList.remove('hide');
+  document.querySelectorAll('.tab[data-tab]').forEach(b => {
+    b.classList.toggle('hide', !canView(b.dataset.tab));
+    b.onclick = () => openTab(b.dataset.tab);
+  });
+  const first = ['accounts','store'].find(canView);
+  if (!first) return $('noAccess').classList.remove('hide');
+  canEdit = canEditD('accounts');
   $('addPanel').classList.toggle('hide', !canEdit);
-  $('date').value = today();
+  $('date').value = today(); $('sDate').value = today();
   const [f, c] = await Promise.all([
     sb.from('funds').select('id,name').eq('active', true).order('id'),
     sb.from('txn_categories').select('id,name,kind').order('id')
   ]);
   cats = c.data || [];
   $('fund').innerHTML = (f.data||[]).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
-  fillCats(); refresh();
+  if (canView('accounts')) { fillCats(); refresh(); }
+  if (canView('store')) loadStore();
+  openTab(first);
+}
+
+function openTab(t){
+  document.querySelectorAll('.tab[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $('acc').classList.toggle('hide', t !== 'accounts');
+  $('store').classList.toggle('hide', t !== 'store');
 }
 
 function kind(){ return document.querySelector('input[name=kind]:checked').value; }
@@ -214,6 +262,73 @@ async function voidTxn(id){
   if (error) return alert('বাতিল হয়নি: ' + error.message);
   refresh();
 }
+
+const dir = () => document.querySelector('input[name=dir]:checked').value;
+const num = n => Number(n).toLocaleString('en-US',{maximumFractionDigits:3});
+document.querySelectorAll('input[name=dir]').forEach(r => r.onchange = () => {
+  const out = dir() === 'out';
+  $('inBox').classList.toggle('hide', out); $('outBox').classList.toggle('hide', !out);
+});
+
+async function loadStore(){
+  const ed = canEditD('store');
+  $('moveForm').classList.toggle('hide', !ed); $('itemForm').classList.toggle('hide', !ed);
+  const [s, m, d] = await Promise.all([
+    sb.from('item_stock').select('*').order('name'),
+    sb.from('stock_movements').select('*, items(name,unit), departments(name)').order('created_at', {ascending:false}).limit(30),
+    sb.from('departments').select('id,name').order('id')
+  ]);
+  items = s.data || [];
+  $('sItem').innerHTML = items.map(x => `<option value="${x.id}">${esc(x.name)} (${esc(x.unit)})</option>`).join('');
+  $('sDept').innerHTML = (d.data||[]).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  $('stock').innerHTML = items.length ? items.map(x => `
+    <div class="txn"><div>${esc(x.name)}${x.low_stock && Number(x.min_stock) > 0 ? ' <span class="low">কম</span>' : ''}
+      <small>সতর্কতার সীমা: ${num(x.min_stock)} ${esc(x.unit)}</small></div>
+      <div class="amt">${num(x.stock)} ${esc(x.unit)}</div></div>`).join('')
+    : 'এখনও কোনো পণ্য নেই। নিচের ফর্ম থেকে প্রথম পণ্য যোগ করুন।';
+  const rows = m.data || [];
+  $('mList').innerHTML = rows.length ? rows.map(x => `
+    <div class="txn"><div>${esc(x.items ? x.items.name : '')}
+      <small>${esc(x.move_date)} · ${x.direction === 'in'
+        ? 'ক্রয়' + (x.supplier ? ' · ' + esc(x.supplier) : '') + (x.unit_price ? ' · ৳' + num(x.unit_price) + '/একক' : '')
+        : 'ইস্যু → ' + esc(x.departments ? x.departments.name : '')}</small>
+      ${x.note ? '<small>' + esc(x.note) + '</small>' : ''}</div>
+      <div class="amt ${x.direction === 'in' ? 'income' : 'expense'}">${x.direction === 'in' ? '+' : '−'}${num(x.qty)} ${esc(x.items ? x.items.unit : '')}</div></div>`).join('')
+    : 'এখনও কোনো লেনদেন নেই।';
+}
+
+$('iSave').onclick = async () => {
+  const name = $('iName').value.trim(), unit = $('iUnit').value.trim();
+  if (!name || !unit) return show($('iMsg'), 'পণ্যের নাম ও একক লিখুন।');
+  $('iSave').disabled = true;
+  const {error} = await sb.from('items').insert({name, unit, min_stock: parseFloat($('iMin').value) || 0});
+  $('iSave').disabled = false;
+  if (error) return show($('iMsg'), error.code === '23505' ? 'এই নামে পণ্য আগেই আছে।' : 'যোগ হয়নি: ' + error.message);
+  $('iName').value = ''; $('iUnit').value = ''; $('iMin').value = 0;
+  show($('iMsg'), 'পণ্য যোগ হয়েছে।', true);
+  loadStore();
+};
+
+$('sSave').onclick = async () => {
+  const qty = parseFloat($('sQty').value), out = dir() === 'out';
+  if (!$('sItem').value) return show($('sMsg'), 'আগে একটি পণ্য যোগ করুন।');
+  if (!(qty > 0)) return show($('sMsg'), 'পরিমাণ লিখুন।');
+  const it = items.find(x => String(x.id) === $('sItem').value);
+  if (out && it && qty > Number(it.stock) && !confirm('মজুদ আছে ' + num(it.stock) + ' ' + it.unit + ', তার চেয়ে বেশি ইস্যু হচ্ছে। তবুও সংরক্ষণ করবেন?')) return;
+  $('sSave').disabled = true; $('sMsg').innerHTML = '';
+  const {error} = await sb.from('stock_movements').insert({
+    item_id: +$('sItem').value, direction: dir(), qty, move_date: $('sDate').value || today(),
+    unit_price: out ? null : (parseFloat($('sPrice').value) || null),
+    supplier: out ? null : ($('sSup').value.trim() || null),
+    to_department: out ? +$('sDept').value : null,
+    note: $('sNote').value.trim() || null
+  });
+  $('sSave').disabled = false;
+  if (error) return show($('sMsg'), 'সংরক্ষণ হয়নি: ' + error.message);
+  $('sQty').value = ''; $('sPrice').value = ''; $('sSup').value = ''; $('sNote').value = '';
+  show($('sMsg'), 'সংরক্ষিত হয়েছে।', true);
+  loadStore();
+};
 
 sb.auth.getSession().then(({data}) => { if (data.session) start(); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
