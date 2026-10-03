@@ -288,13 +288,23 @@ async function loadStore(){
     : 'এখনও কোনো পণ্য নেই। নিচের ফর্ম থেকে প্রথম পণ্য যোগ করুন।';
   const rows = m.data || [];
   $('mList').innerHTML = rows.length ? rows.map(x => `
-    <div class="txn"><div>${esc(x.items ? x.items.name : '')}
+    <div class="txn ${x.voided ? 'void' : ''}"><div>${esc(x.items ? x.items.name : '')}
       <small>${esc(x.move_date)} · ${x.direction === 'in'
         ? 'ক্রয়' + (x.supplier ? ' · ' + esc(x.supplier) : '') + (x.unit_price ? ' · ৳' + num(x.unit_price) + '/একক' : '')
         : 'ইস্যু → ' + esc(x.departments ? x.departments.name : '')}</small>
-      ${x.note ? '<small>' + esc(x.note) + '</small>' : ''}</div>
+      ${x.note ? '<small>' + esc(x.note) + '</small>' : ''}
+      ${x.voided ? '<small>বাতিল: ' + esc(x.void_reason) + '</small>' : (canEditD('store') ? `<button class="link" data-id="${x.id}">বাতিল করুন</button>` : '')}</div>
       <div class="amt ${x.direction === 'in' ? 'income' : 'expense'}">${x.direction === 'in' ? '+' : '−'}${num(x.qty)} ${esc(x.items ? x.items.unit : '')}</div></div>`).join('')
     : 'এখনও কোনো লেনদেন নেই।';
+  document.querySelectorAll('#mList .link').forEach(b => b.onclick = () => voidMove(b.dataset.id));
+}
+
+async function voidMove(id){
+  const reason = prompt('বাতিলের কারণ লিখুন:');
+  if (!reason || !reason.trim()) return;
+  const {error} = await sb.from('stock_movements').update({voided:true, void_reason:reason.trim()}).eq('id', id);
+  if (error) return alert('বাতিল হয়নি: ' + error.message);
+  loadStore();
 }
 
 $('iSave').onclick = async () => {
